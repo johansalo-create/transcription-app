@@ -5,6 +5,7 @@ A macOS menu bar app that automatically transcribes your Voice Memos using Whisp
 ## Features
 
 - **Automatic transcription** - Watches your Voice Memos folder and transcribes new recordings
+- **System audio recording** - Record Teams/Zoom calls and other system audio for transcription
 - **Multi-language support** - Auto-detect, Swedish, or English
 - **Web interface** - Browse and search all transcripts at http://localhost:5051
 - **Multi-select copy** - Select multiple transcripts and copy them all at once
@@ -57,6 +58,27 @@ Open http://localhost:5051 to:
 - Search all transcripts
 - Sort by recording date or transcription date
 - Select multiple transcripts and copy them together
+
+### System Audio Recording (for Teams/Zoom calls)
+
+To record system audio (e.g., from video calls), you need to set up BlackHole:
+
+1. **Install BlackHole:**
+   ```bash
+   brew install blackhole-2ch
+   ```
+
+2. **Create a Multi-Output Device:**
+   - Open "Audio MIDI Setup" (search in Spotlight)
+   - Click "+" at bottom left → "Create Multi-Output Device"
+   - Check both your speakers AND "BlackHole 2ch"
+   - Right-click the Multi-Output Device → "Use This Device For Sound Output"
+
+3. **Record:**
+   - Click "Record System Audio" in the menu bar app
+   - The icon changes to 🔴 while recording
+   - Click "Stop Recording" when done
+   - The recording is automatically transcribed
 
 ## Data Storage
 

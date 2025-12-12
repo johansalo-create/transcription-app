@@ -21,6 +21,10 @@ from config import (
     DB_PATH, SETTINGS_PATH, LANGUAGE_OPTIONS, VOICE_MEMOS_DIR,
     INPUT_DIR, FLASK_PORT
 )
+from system_recorder import (
+    SystemRecorder, check_blackhole_installed,
+    show_blackhole_setup_instructions
+)
 
 # Script paths - relative to this file
 BASE_DIR = Path(__file__).parent
@@ -39,10 +43,17 @@ class TranscriptionApp(rumps.App):
         self.webapp_process = None
         self.is_running = False
 
+        # System audio recorder
+        self.system_recorder = SystemRecorder()
+        self.recording_timer = None
+
         # Menu items
         self.toggle_item = rumps.MenuItem("Start Service", callback=self.toggle_service)
         self.status_item = rumps.MenuItem("Status: Stopped", callback=None)
         self.status_item.set_callback(None)
+
+        # System recording menu item
+        self.record_system_item = rumps.MenuItem("Record System Audio", callback=self.toggle_system_recording)
 
         self.recent_menu = rumps.MenuItem("Recent Transcripts")
         self.language_menu = rumps.MenuItem("Language")
@@ -53,6 +64,7 @@ class TranscriptionApp(rumps.App):
             self.status_item,
             None,  # Separator
             rumps.MenuItem("Start Voice Memo", callback=self.start_voice_memo),
+            self.record_system_item,
             rumps.MenuItem("Process Recent Files", callback=self.process_recent),
             rumps.MenuItem("Open Web UI", callback=self.open_webui),
             rumps.MenuItem("Open Voice Memos Folder", callback=self.open_voice_memos),
@@ -201,6 +213,72 @@ class TranscriptionApp(rumps.App):
     def start_voice_memo(self, sender):
         """Open Voice Memos app to start recording."""
         subprocess.run(["open", "-a", "Voice Memos"])
+
+    def toggle_system_recording(self, sender):
+        """Start or stop system audio recording."""
+        if self.system_recorder.is_recording:
+            # Stop recording
+            output_file, message = self.system_recorder.stop_recording()
+            self.record_system_item.title = "Record System Audio"
+            self.title = "🎙️"
+
+            if self.recording_timer:
+                self.recording_timer.stop()
+                self.recording_timer = None
+
+            if output_file and output_file.exists():
+                rumps.notification(
+                    "Recording Saved",
+                    message,
+                    f"File: {output_file.name}\nWill be transcribed automatically."
+                )
+            else:
+                rumps.notification(
+                    "Recording Stopped",
+                    message,
+                    ""
+                )
+        else:
+            # Check if BlackHole is installed
+            if not check_blackhole_installed():
+                response = rumps.alert(
+                    title="BlackHole Required",
+                    message="To record system audio, you need BlackHole installed.\n\nWould you like to see setup instructions?",
+                    ok="Show Instructions",
+                    cancel="Cancel"
+                )
+                if response == 1:
+                    rumps.alert(
+                        title="BlackHole Setup",
+                        message=show_blackhole_setup_instructions(),
+                        ok="OK"
+                    )
+                return
+
+            # Start recording
+            success, message = self.system_recorder.start_recording()
+            if success:
+                self.record_system_item.title = "Stop Recording"
+                self.title = "🔴"
+                rumps.notification(
+                    "Recording Started",
+                    "System Audio",
+                    "Click 'Stop Recording' when done."
+                )
+
+                # Start timer to update duration
+                self.recording_timer = rumps.Timer(self.update_recording_duration, 1)
+                self.recording_timer.start()
+            else:
+                rumps.alert(f"Failed to start recording: {message}")
+
+    def update_recording_duration(self, sender):
+        """Update the menu item with recording duration."""
+        if self.system_recorder.is_recording:
+            duration = int(self.system_recorder.get_duration())
+            mins = duration // 60
+            secs = duration % 60
+            self.record_system_item.title = f"Stop Recording ({mins}:{secs:02d})"
 
     def open_webui(self, sender):
         """Open the web UI in browser."""
