@@ -44,44 +44,84 @@ def check_multi_output_exists():
     return "Multi-Output Device" in result.stdout
 
 
+def get_audio_device_index(device_name):
+    """Get the ffmpeg device index for an audio device."""
+    result = subprocess.run(
+        ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+        capture_output=True, text=True
+    )
+    # Parse stderr for device list (ffmpeg outputs to stderr)
+    lines = result.stderr.split('\n')
+    audio_section = False
+    for line in lines:
+        if "AVFoundation audio devices:" in line:
+            audio_section = True
+            continue
+        if audio_section and device_name in line:
+            # Extract index from line like "[AVFoundation ...] [0] BlackHole 2ch"
+            import re
+            match = re.search(r'\[(\d+)\]', line)
+            if match:
+                return match.group(1)
+    return None
+
+
 class SystemRecorder:
-    """Records system audio using ffmpeg and BlackHole."""
-    
+    """Records system audio + microphone using ffmpeg and BlackHole."""
+
     def __init__(self):
         self.process = None
         self.is_recording = False
         self.output_file = None
         self.start_time = None
-    
-    def start_recording(self, filename=None):
-        """Start recording system audio."""
+
+    def start_recording(self, filename=None, include_mic=True):
+        """Start recording system audio (and optionally microphone)."""
         if self.is_recording:
             return False, "Already recording"
-        
+
         blackhole_device = get_blackhole_device()
         if not blackhole_device:
             return False, "BlackHole not installed"
-        
+
         # Generate filename
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d %H%M%S")
             filename = f"{timestamp}-system.m4a"
-        
+
         self.output_file = INPUT_DIR / filename
         INPUT_DIR.mkdir(parents=True, exist_ok=True)
-        
-        # Record using ffmpeg from BlackHole device
-        # Use avfoundation to capture from BlackHole
-        self.process = subprocess.Popen([
-            "ffmpeg",
-            "-f", "avfoundation",
-            "-i", f":{blackhole_device}",  # Audio only from BlackHole
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-y",  # Overwrite output
-            str(self.output_file)
-        ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
+
+        # Get device indices
+        blackhole_idx = get_audio_device_index(blackhole_device)
+
+        if include_mic:
+            # Record both microphone (device 0) and BlackHole, mix them together
+            # This captures both what you say AND what others say
+            self.process = subprocess.Popen([
+                "ffmpeg",
+                "-f", "avfoundation",
+                "-i", ":0",  # Default microphone
+                "-f", "avfoundation",
+                "-i", f":{blackhole_idx or blackhole_device}",  # System audio via BlackHole
+                "-filter_complex", "amix=inputs=2:duration=longest",  # Mix both inputs
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-y",
+                str(self.output_file)
+            ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            # Record only system audio (BlackHole)
+            self.process = subprocess.Popen([
+                "ffmpeg",
+                "-f", "avfoundation",
+                "-i", f":{blackhole_idx or blackhole_device}",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-y",
+                str(self.output_file)
+            ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
         self.is_recording = True
         self.start_time = time.time()
         return True, str(self.output_file)
