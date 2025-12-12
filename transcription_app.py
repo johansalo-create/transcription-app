@@ -52,6 +52,7 @@ class TranscriptionApp(rumps.App):
             self.toggle_item,
             self.status_item,
             None,  # Separator
+            rumps.MenuItem("Start Voice Memo", callback=self.start_voice_memo),
             rumps.MenuItem("Process Recent Files", callback=self.process_recent),
             rumps.MenuItem("Open Web UI", callback=self.open_webui),
             rumps.MenuItem("Open Voice Memos Folder", callback=self.open_voice_memos),
@@ -196,6 +197,10 @@ class TranscriptionApp(rumps.App):
             "Processing",
             "Checking for recent unprocessed files..."
         )
+
+    def start_voice_memo(self, sender):
+        """Open Voice Memos app to start recording."""
+        subprocess.run(["open", "-a", "Voice Memos"])
 
     def open_webui(self, sender):
         """Open the web UI in browser."""
